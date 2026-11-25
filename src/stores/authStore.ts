@@ -32,6 +32,11 @@ export const useAuthStore = defineStore('auth', () => {
     const snap = await getDoc(docRef)
     if (snap.exists()) {
       profile.value = { uid, ...snap.data() } as UserProfile
+    } else {
+      // Se il profilo su Firestore è stato eliminato, forza il logout pulito
+      await signOut(auth)
+      user.value = null
+      profile.value = null
     }
   }
 

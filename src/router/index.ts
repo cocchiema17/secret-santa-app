@@ -19,6 +19,12 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
+      path: '/preferences',
+      name: 'preferences',
+      component: () => import('@/views/PreferencesView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/validate',
       name: 'validate',
       component: () => import('@/views/ValidateView.vue'),

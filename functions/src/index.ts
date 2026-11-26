@@ -1,6 +1,12 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import * as admin from 'firebase-admin'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { defineSecret } from 'firebase-functions/params'
+import * as nodemailer from 'nodemailer'
+
+const smtpUser = defineSecret('SMTP_USER')
+const smtpPass = defineSecret('SMTP_PASS')
 
 admin.initializeApp()
 const db = admin.firestore()
@@ -295,3 +301,192 @@ export const seedMockUsers = onCall(async (request) => {
   await batch.commit()
   return { success: true, message: 'Creati 4 amici fittizi (totale 5 con te)!' }
 })
+
+
+// Helper per creare il transporter Nodemailer (configurato per Gmail; modificabile per altri SMTP)
+function createMailTransporter() {
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: smtpUser.value(),
+      pass: smtpPass.value()
+    }
+  })
+}
+
+// Helper per inviare email a tutti i partecipanti reali (esclude i mock_user_ di test)
+async function sendEmailToAllUsers(subject: string, htmlBody: string) {
+  const usersSnap = await db.collection('users').get()
+  const emails: string[] = []
+
+  usersSnap.forEach((doc) => {
+    if (!doc.id.startsWith('mock_user_') && doc.data().email) {
+      emails.push(doc.data().email)
+    }
+  })
+
+  if (emails.length === 0) return 0
+
+  const transporter = createMailTransporter()
+  await transporter.sendMail({
+    from: `"Babbo Natale Segreto 🎅" <${smtpUser.value()}>`,
+    bcc: emails, // BCC così gli indirizzi restano ordinati e privati
+    subject,
+    html: htmlBody
+  })
+
+  return emails.length
+}
+
+/**
+ * 6. INVIO EMAIL DI LANCIO / ANNUNCIO WEB APP (Chiamata manuale Admin)
+ */
+export const sendAppLaunchEmail = onCall(
+  { secrets: [smtpUser, smtpPass] },
+  async (request) => {
+    await assertIsAdmin(request.auth?.uid)
+
+    const { appUrl, customMessage } = request.data as {
+      appUrl: string
+      customMessage?: string
+    }
+
+    if (!appUrl) {
+      throw new HttpsError('invalid-argument', 'URL dell’applicazione mancante.')
+    }
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 2px solid #c1121f; border-radius: 12px;">
+        <h2 style="color: #c1121f; text-align: center;">🎅 Il Villaggio del Babbo Natale Segreto è aperto! 🎄</h2>
+        <p>Ciao!</p>
+        <p>${customMessage || 'È arrivato il momento di registrarti, inserire i tuoi indizi regalo e prepararti alle sfide giornaliere di dicembre!'}</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${appUrl}" style="background-color: #1b4332; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+            Entra nella Web App
+          </a>
+        </div>
+        <p style="font-size: 12px; color: #666;">A presto, gli Elfi di Babbo Natale ❄️</p>
+      </div>
+    `
+
+    const sentCount = await sendEmailToAllUsers(
+      '🎅 Babbo Natale Segreto 2026: Entra nella Web App!',
+      html
+    )
+
+    return { success: true, message: `Email inviata a ${sentCount} partecipanti!` }
+  }
+)
+
+/**
+ * 7. ATTIVA UNA SFIDA E INVIA L'EMAIL DI NOTIFICA (Usata sia dallo scheduler che dal tasto test Admin)
+ */
+async function activateChallengeAndNotify(challengeDoc: admin.firestore.DocumentSnapshot, appUrl: string) {
+  const data = challengeDoc.data()!
+
+  await challengeDoc.ref.update({
+    status: 'active',
+    activatedAt: admin.firestore.FieldValue.serverTimestamp()
+  })
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 2px solid #1b4332; border-radius: 12px;">
+      <h2 style="color: #1b4332; text-align: center;">🔔 Nuova Sfida Giornaliera (Giorno ${data.day} Dicembre)!</h2>
+      <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #c1121f;">${data.title}</h3>
+        <p style="margin-bottom: 10px;">${data.description}</p>
+        <p style="font-weight: bold; color: #d97706; margin-bottom: 0;">🏆 In palio: ${data.rewardPoints} punti</p>
+      </div>
+      <div style="text-align: center; margin: 25px 0;">
+        <a href="${appUrl}" style="background-color: #c1121f; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">
+          Vai all'App e partecipa
+        </a>
+      </div>
+    </div>
+  `
+
+  return await sendEmailToAllUsers(
+    `🎄 Sfida del ${data.day} Dicembre: ${data.title} (+${data.rewardPoints} pt)`,
+    html
+  )
+}
+
+/**
+ * 8. AZIONE MANUALE ADMIN: ATTIVA SUBITO UNA SFIDA E MANDA EMAIL
+ */
+export const triggerChallengeNow = onCall(
+  { secrets: [smtpUser, smtpPass] },
+  async (request) => {
+    await assertIsAdmin(request.auth?.uid)
+
+    const { challengeId, appUrl } = request.data as { challengeId: string; appUrl: string }
+    const docSnap = await db.collection('challenges').doc(challengeId).get()
+
+    if (!docSnap.exists) {
+      throw new HttpsError('not-found', 'Sfida non trovata.')
+    }
+
+    const sentCount = await activateChallengeAndNotify(docSnap, appUrl || 'https://secret-santa-2026-d1e50.web.app')
+    return { success: true, message: `Sfida attivata ed email inviata a ${sentCount} partecipanti!` }
+  }
+)
+
+/**
+ * 9. SCHEDULER AUTOMATICO: OGNI GIORNO ALLE 08:00 IMPOSTA UN ORARIO RANDOMICO (10:00 - 19:30)
+ */
+export const planDailyRandomChallenge = onSchedule(
+  { schedule: '0 8 * * *', timeZone: 'Europe/Rome' },
+  async () => {
+    const now = new Date()
+    // Verifica se siamo a Dicembre (getMonth() === 11)
+    if (now.getMonth() !== 11) return
+
+    const todayDay = now.getDate()
+    if (todayDay < 1 || todayDay > 24) return
+
+    const snap = await db
+      .collection('challenges')
+      .where('day', '==', todayDay)
+      .where('status', '==', 'pending')
+      .limit(1)
+      .get()
+
+    if (snap.empty) return
+
+    // Calcola un orario casuale tra le 10:00 e le 19:30 di oggi
+    const randomHour = Math.floor(Math.random() * 10) + 10 // 10..19
+    const randomMinute = Math.floor(Math.random() * 60)
+    const releaseDate = new Date(now.getFullYear(), 11, todayDay, randomHour, randomMinute, 0)
+
+    await snap.docs[0].ref.update({
+      scheduledReleaseAt: admin.firestore.Timestamp.fromDate(releaseDate)
+    })
+  }
+)
+
+/**
+ * 10. SCHEDULER AUTOMATICO: OGNI 15 MINUTI CONTROLLA SE È ORA DI RILASCIARE LA SFIDA
+ */
+export const checkAndReleaseChallenge = onSchedule(
+  {
+    schedule: '*/15 10-20 * * *',
+    timeZone: 'Europe/Rome',
+    secrets: [smtpUser, smtpPass]
+  },
+  async () => {
+    const now = admin.firestore.Timestamp.now()
+
+    const snap = await db
+      .collection('challenges')
+      .where('status', '==', 'pending')
+      .where('scheduledReleaseAt', '<=', now)
+      .get()
+
+    if (snap.empty) return
+
+    const appUrl = 'https://secret-santa-2026-d1e50.web.app'
+    for (const docSnap of snap.docs) {
+      await activateChallengeAndNotify(docSnap, appUrl)
+    }
+  }
+)

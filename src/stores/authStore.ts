@@ -8,7 +8,7 @@ import {
   onAuthStateChanged,
   type User
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore'
 import { auth, db, googleProvider } from '@/firebase'
 
 export interface UserProfile {
@@ -18,36 +18,56 @@ export interface UserProfile {
   email: string
   points: number
   isAdmin: boolean
-  preferences: Array<{ id: string; level: 'ambito' | 'specifico'; text: string }>
+  preferences: Array<{ id: string; level: 'ambito' | 'specifico'; text: string; cost?: number }>
 }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const profile = ref<UserProfile | null>(null)
   const isReady = ref(false)
+  let unsubscribeProfile: (() => void) | null = null
 
-  // Carica il profilo da Firestore
+  // Sottoscrizione in tempo reale al profilo utente su Firestore
+  function subscribeToProfile(uid: string): Promise<void> {
+    if (unsubscribeProfile) {
+      unsubscribeProfile()
+      unsubscribeProfile = null
+    }
+
+    return new Promise((resolve) => {
+      const docRef = doc(db, 'users', uid)
+      unsubscribeProfile = onSnapshot(docRef, async (snap) => {
+        if (snap.exists()) {
+          profile.value = { uid, ...snap.data() } as UserProfile
+        } else {
+          await signOut(auth)
+          user.value = null
+          profile.value = null
+        }
+        resolve()
+      })
+    })
+  }
+
+  // Manteniamo anche fetchUserProfile come alias compatibile per eventuali chiamate esistenti
   async function fetchUserProfile(uid: string) {
-    const docRef = doc(db, 'users', uid)
-    const snap = await getDoc(docRef)
+    const snap = await getDoc(doc(db, 'users', uid))
     if (snap.exists()) {
       profile.value = { uid, ...snap.data() } as UserProfile
-    } else {
-      // Se il profilo su Firestore è stato eliminato, forza il logout pulito
-      await signOut(auth)
-      user.value = null
-      profile.value = null
     }
   }
 
-  // Inizializza il listener sullo stato di login
   function initAuth(): Promise<void> {
     return new Promise((resolve) => {
       onAuthStateChanged(auth, async (firebaseUser) => {
         user.value = firebaseUser
         if (firebaseUser) {
-          await fetchUserProfile(firebaseUser.uid)
+          await subscribeToProfile(firebaseUser.uid)
         } else {
+          if (unsubscribeProfile) {
+            unsubscribeProfile()
+            unsubscribeProfile = null
+          }
           profile.value = null
         }
         isReady.value = true
@@ -56,7 +76,6 @@ export const useAuthStore = defineStore('auth', () => {
     })
   }
 
-  // Registrazione Email + Password
   async function registerWithEmail(firstName: string, lastName: string, email: string, password: string) {
     const cred = await createUserWithEmailAndPassword(auth, email, password)
     const newProfile: Omit<UserProfile, 'uid'> = {
@@ -71,23 +90,20 @@ export const useAuthStore = defineStore('auth', () => {
       ...newProfile,
       createdAt: serverTimestamp()
     })
-    profile.value = { uid: cred.user.uid, ...newProfile }
+    await subscribeToProfile(cred.user.uid)
   }
 
-  // Login Email + Password
   async function loginWithEmail(email: string, password: string) {
     const cred = await signInWithEmailAndPassword(auth, email, password)
-    await fetchUserProfile(cred.user.uid)
+    await subscribeToProfile(cred.user.uid)
   }
 
-  // Login / Registrazione rapida con Google
   async function loginWithGoogle() {
     const cred = await signInWithPopup(auth, googleProvider)
     const docRef = doc(db, 'users', cred.user.uid)
     const snap = await getDoc(docRef)
 
     if (!snap.exists()) {
-      // Primo accesso con Google: creiamo il profilo su Firestore
       const fullName = cred.user.displayName || 'Elfo Misterioso'
       const parts = fullName.trim().split(' ')
       const firstName = parts[0] || 'Elfo'
@@ -105,13 +121,15 @@ export const useAuthStore = defineStore('auth', () => {
         ...newProfile,
         createdAt: serverTimestamp()
       })
-      profile.value = { uid: cred.user.uid, ...newProfile }
-    } else {
-      profile.value = { uid: cred.user.uid, ...snap.data() } as UserProfile
     }
+    await subscribeToProfile(cred.user.uid)
   }
 
   async function logout() {
+    if (unsubscribeProfile) {
+      unsubscribeProfile()
+      unsubscribeProfile = null
+    }
     await signOut(auth)
     user.value = null
     profile.value = null

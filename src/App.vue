@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
+import Snowfall from '@/components/Snowfall.vue'
 </script>
 
 <template>
+  <Snowfall />
   <RouterView />
 </template>
 

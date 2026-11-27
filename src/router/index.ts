@@ -29,6 +29,11 @@ const router = createRouter({
       name: 'validate',
       component: () => import('@/views/ValidateView.vue'),
       meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue')
     }
   ]
 })

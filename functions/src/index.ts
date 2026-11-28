@@ -339,42 +339,70 @@ async function sendEmailToAllUsers(subject: string, htmlBody: string) {
 }
 
 /**
- * 6. INVIO EMAIL DI LANCIO / ANNUNCIO WEB APP (Chiamata manuale Admin)
+ * 6. INVIO EMAIL DI INVITO A REGISTRARSI (Destinatari inseriti manualmente dall'Admin)
  */
 export const sendAppLaunchEmail = onCall(
   { secrets: [smtpUser, smtpPass] },
   async (request) => {
     await assertIsAdmin(request.auth?.uid)
 
-    const { appUrl, customMessage } = request.data as {
+    const { appUrl, customMessage, recipientEmails } = request.data as {
       appUrl: string
       customMessage?: string
+      recipientEmails: string[]
     }
 
     if (!appUrl) {
       throw new HttpsError('invalid-argument', 'URL dell’applicazione mancante.')
     }
 
+    if (!Array.isArray(recipientEmails) || recipientEmails.length === 0) {
+      throw new HttpsError('invalid-argument', 'Inserisci almeno un indirizzo email destinatario.')
+    }
+
+    // Pulisce e valida gli indirizzi email
+    const validEmails = recipientEmails
+      .map((e) => e.trim().toLowerCase())
+      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+
+    if (validEmails.length === 0) {
+      throw new HttpsError('invalid-argument', 'Nessun indirizzo email valido trovato.')
+    }
+
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 2px solid #c1121f; border-radius: 12px;">
-        <h2 style="color: #c1121f; text-align: center;">🎅 Il Villaggio del Babbo Natale Segreto è aperto! 🎄</h2>
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 24px; border: 2px solid #c1121f; border-radius: 12px; background-color: #ffffff;">
+        <h2 style="color: #c1121f; text-align: center;">🎅 Sei invitato al Babbo Natale Segreto 2026! 🎄</h2>
         <p>Ciao!</p>
-        <p>${customMessage || 'È arrivato il momento di registrarti, inserire i tuoi indizi regalo e prepararti alle sfide giornaliere di dicembre!'}</p>
+        <p>${
+          customMessage ||
+          'Il Villaggio di Babbo Natale è ufficialmente aperto! Clicca sul pulsante qui sotto per creare il tuo account, inserire i tuoi indizi regalo e prepararti alle sfide giornaliere di dicembre.'
+        }</p>
         <div style="text-align: center; margin: 30px 0;">
-          <a href="${appUrl}" style="background-color: #1b4332; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold;">
-            Entra nella Web App
+          <a href="${appUrl}" style="background-color: #1b4332; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+            Registrati nella Web App
           </a>
         </div>
-        <p style="font-size: 12px; color: #666;">A presto, gli Elfi di Babbo Natale ❄️</p>
+        <p style="font-size: 13px; color: #555;">
+          Oppure copia questo link nel browser: <br/>
+          <a href="${appUrl}" style="color: #c1121f;">${appUrl}</a>
+        </p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+        <p style="font-size: 12px; color: #888; text-align: center;">A presto, gli Elfi di Babbo Natale ❄️</p>
       </div>
     `
 
-    const sentCount = await sendEmailToAllUsers(
-      '🎅 Babbo Natale Segreto 2026: Entra nella Web App!',
+    const transporter = createMailTransporter()
+    await transporter.sendMail({
+      from: `"Babbo Natale Segreto 🎅" <${smtpUser.value()}>`,
+      bcc: validEmails,
+      subject: '🎅 Invito Ufficiale: Babbo Natale Segreto 2026!',
       html
-    )
+    })
 
-    return { success: true, message: `Email inviata a ${sentCount} partecipanti!` }
+    return {
+      success: true,
+      message: `Email di invito inviata con successo a ${validEmails.length} destinatari!`
+    }
   }
 )
 

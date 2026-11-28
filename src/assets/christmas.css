@@ -88,3 +88,10 @@ body {
     min-height: 44px; /* Area touch comoda su smartphone */
   }
 }
+
+/* Placeholder ben visibili su input e textarea scuri */
+.form-control::placeholder,
+.form-select::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+  opacity: 1;
+}

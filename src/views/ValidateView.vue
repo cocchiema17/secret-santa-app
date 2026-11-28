@@ -51,8 +51,9 @@ const selectedChallengeId = ref('')
 const selectedWinnerUid = ref('')
 const validating = ref(false)
 
-// Form Email Lancio
+// Form Email Invito (non ancora registrati)
 const appUrl = ref(window.location.origin)
+const rawEmails = ref('')
 const customLaunchMsg = ref('')
 const sendingLaunchEmail = ref(false)
 
@@ -200,17 +201,44 @@ async function handleAwardWinner() {
 
 // --- INVIO EMAIL LANCIO WEB APP ---
 async function handleSendLaunchEmail() {
-  if (!confirm('Inviare l’email di annuncio a tutti i partecipanti registrati?')) return
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+  const rawTokens = rawEmails.value
+    .split(/[\s,;]+/)
+    .map((e) => e.trim())
+    .filter((e) => e.length > 0)
+
+  if (rawTokens.length === 0) {
+    feedback.value = { type: 'danger', text: 'Inserisci almeno un indirizzo email.' }
+    return
+  }
+
+  const invalidEntries = rawTokens.filter((e) => !emailRegex.test(e))
+  if (invalidEntries.length > 0) {
+    feedback.value = {
+      type: 'danger',
+      text: `Indirizzi email non validi rilevati: ${invalidEntries.join(', ')}`
+    }
+    return
+  }
+
+  // Rimuove eventuali duplicati
+  const uniqueEmails = [...new Set(rawTokens.map((e) => e.toLowerCase()))]
+
+  if (!confirm(`Inviare l’email di invito a ${uniqueEmails.length} indirizzi validi?`)) return
+
   sendingLaunchEmail.value = true
   feedback.value = null
   try {
     const launchFn = httpsCallable(functions, 'sendAppLaunchEmail')
     const res = await launchFn({
       appUrl: appUrl.value,
+      recipientEmails: uniqueEmails,
       customMessage: customLaunchMsg.value.trim()
     })
     const data = res.data as { message: string }
     feedback.value = { type: 'success', text: data.message }
+    rawEmails.value = ''
   } catch (err: any) {
     feedback.value = { type: 'danger', text: err.message }
   } finally {
@@ -412,12 +440,21 @@ onMounted(loadData)
         </div>
       </div>
 
-      <!-- 4. INVIO EMAIL DI LANCIO WEB APP -->
+      <!-- 4. INVIO EMAIL DI INVITO (PER CHI NON È ANCORA REGISTRATO) -->
       <div class="card bg-dark text-light border-info border-opacity-50 shadow rounded-4">
         <div class="card-header border-secondary fw-bold">
-          <i class="bi bi-envelope-paper-fill me-2 text-info"></i>Annuncio Web App via Email
+          <i class="bi bi-envelope-paper-fill me-2 text-info"></i>Invito Web App via Email (Nuovi Partecipanti)
         </div>
         <div class="card-body p-4">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Indirizzi email dei destinatari</label>
+            <textarea
+              v-model="rawEmails"
+              rows="3"
+              class="form-control bg-dark text-light border-secondary"
+              placeholder="Incolla gli indirizzi email separati da virgola o a capo (es. luca@gmail.com, giulia@gmail.com)..."
+            ></textarea>
+          </div>
           <div class="mb-3">
             <label class="form-label small fw-semibold">Link della Web App</label>
             <input v-model="appUrl" type="url" class="form-control bg-dark text-light border-secondary" />
@@ -428,7 +465,7 @@ onMounted(loadData)
               v-model="customLaunchMsg"
               rows="2"
               class="form-control bg-dark text-light border-secondary"
-              placeholder="Lascia vuoto per usare il messaggio natalizio predefinito..."
+              placeholder="Lascia vuoto per usare il messaggio di invito predefinito..."
             ></textarea>
           </div>
           <button
@@ -437,7 +474,7 @@ onMounted(loadData)
             @click="handleSendLaunchEmail"
           >
             <span v-if="sendingLaunchEmail" class="spinner-border spinner-border-sm me-1"></span>
-            Invia Email di Invito a Tutti
+            Invia Invito a Registrarsi
           </button>
         </div>
       </div>

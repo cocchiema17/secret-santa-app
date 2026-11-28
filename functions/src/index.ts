@@ -232,7 +232,7 @@ export const awardChallengePoints = onCall(async (request) => {
 })
 
 /**
- * 5. HELPER DI TEST: CREA 5 UTENTI FITTIZI CON INDIZI PRECOMPILATI
+ * 5. HELPER DI TEST: CREA UTENTI FITTIZI CON INDIZI PRECOMPILATI
  */
 export const seedMockUsers = onCall(async (request) => {
   await assertIsAdmin(request.auth?.uid)
@@ -280,6 +280,94 @@ export const seedMockUsers = onCall(async (request) => {
       preferences: [
         { id: 'h1', level: 'ambito', text: 'Libri e cancelleria', cost: 15 },
         { id: 'h2', level: 'specifico', text: 'Un romanzo thriller o un’agenda Moleskine 2027', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_5',
+      firstName: 'Alessandro',
+      lastName: 'Ferrari',
+      email: 'alessandro.test@esempio.it',
+      points: 30,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Sport e attivita’ all’aperto', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Un paio di guanti da tennis o una racchetta professionale', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_6',
+      firstName: 'Chiara',
+      lastName: 'Romano',
+      email: 'chiara.test@esempio.it',
+      points: 45,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Moda e accessori', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Una borsa da viaggio o un set di creme per il viso', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_7',
+      firstName: 'Davide',
+      lastName: 'Gallo',
+      email: 'davide.test@esempio.it',
+      points: 55,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Viaggi e turismo', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Un viaggio weekend in un luogo incantevole o un tour culturale', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_8',
+      firstName: 'Elena',
+      lastName: 'Costa',
+      email: 'elena.test@esempio.it',
+      points: 50,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Salute e benessere', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Un abbonamento a un centro fitness o una sessione di massaggi', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_9',
+      firstName: 'Francesco',
+      lastName: 'Marini',
+      email: 'francesco.test@esempio.it',
+      points: 40,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Tecnologia e gaming', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Un videogioco di successo o un accessorio per gaming', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_10',
+      firstName: 'Martina',
+      lastName: 'Conti',
+      email: 'martina.test@esempio.it',
+      points: 45,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Moda e accessori', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Una borsa da viaggio o un set di creme per il viso', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_11',
+      firstName: 'Lorenzo',
+      lastName: 'Rossi',
+      email: 'lorenzo.test@esempio.it',
+      points: 50,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Viaggi e turismo', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Un viaggio weekend in un luogo incantevole o un tour culturale', cost: 30 }
+      ]
+    },
+    {
+      uid: 'mock_user_12',
+      firstName: 'Giulia',
+      lastName: 'Bianchi',
+      email: 'giulia.test@esempio.it',
+      points: 45,
+      preferences: [
+        { id: 'h1', level: 'ambito', text: 'Moda e accessori', cost: 15 },
+        { id: 'h2', level: 'specifico', text: 'Una borsa da viaggio o un set di creme per il viso', cost: 30 }
       ]
     }
   ]

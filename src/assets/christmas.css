@@ -89,9 +89,9 @@ body {
   }
 }
 
-/* Placeholder ben visibili su input e textarea scuri */
-.form-control::placeholder,
-.form-select::placeholder {
+/* Placeholder ben visibili SOLO su input e textarea scuri */
+.form-control.bg-dark::placeholder,
+.form-select.bg-dark::placeholder {
   color: rgba(255, 255, 255, 0.45) !important;
   opacity: 1;
 }
